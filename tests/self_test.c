@@ -13,6 +13,7 @@
  */
 #include "libclang_loader.h"
 
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -168,8 +169,11 @@ static void check_header(const NeuraLibclang *lib) {
         CHECK(lib->clang_getArgType(add, 1).kind == CXType_Int);
         CHECK(!lib->clang_isFunctionTypeVariadic(add));
         CHECK(lib->clang_isFunctionTypeVariadic(log_message));
+        /* libclang parses for the host, which this file is compiled for too.
+         * Plain char is signed on some hosts (x86-64) and unsigned on others
+         * (AArch64 Linux), and libclang names the two differently. */
         CHECK(lib->clang_getPointeeType(lib->clang_getArgType(log_message, 0)).kind ==
-              CXType_Char_S);
+              (CHAR_MIN < 0 ? CXType_Char_S : CXType_Char_U));
         CHECK(lib->clang_isConstQualifiedType(
             lib->clang_getPointeeType(lib->clang_getArgType(log_message, 0))));
 
