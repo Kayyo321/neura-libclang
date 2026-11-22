@@ -7,7 +7,7 @@ submodule to import C headers.
 
 Building against this repository needs only a C compiler and the platform's
 dynamic loader. At run time, `neura_libclang_load()` opens a system libclang
-with `dlopen` (`LoadLibrary` on Windows), checks that it exports every
+with `dlopen` (`LoadLibraryExW` on Windows), checks that it exports every
 function the importer uses, and fills a table of function pointers. Nothing
 links libclang, and no LLVM source tree is needed.
 
@@ -99,7 +99,24 @@ exports every function in the table:
   `/usr/lib/llvm-N/lib/libclang.so` and `/usr/lib/llvm-N/lib/libclang.so.1`.
 - **macOS:** `libclang.dylib`, then the Xcode Command Line Tools, Xcode, and
   Homebrew (`/opt/homebrew/opt/llvm`, `/usr/local/opt/llvm`) locations.
-- **Windows:** `libclang.dll`, then `C:\Program Files\LLVM\bin\libclang.dll`.
+- **Windows:** `libclang.dll` in the LLVM installation
+  (`%ProgramW6432%\LLVM\bin`, then the `bin` directory below the one
+  recorded in the registry key `HKLM\SOFTWARE\LLVM\LLVM`), then in the C++
+  Clang tools of Visual Studio (`VC\Tools\Llvm\x64\bin` of the developer
+  environment's Visual Studio, `VCINSTALLDIR`, then of the newest Visual
+  Studio that `vswhere` reports with them, waiting at most 30 seconds for
+  it), then in each directory of `PATH`
+  by its full path. Only files that exist are tried, and the current
+  directory never is.
+
+Names are UTF-8. On Windows, a name with `/` or `\`, or one that begins with
+a drive, is a path: that file is loaded, made absolute against the current
+directory when it is relative, and its own dependencies are found in its
+directory (`LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR`). A bare name is looked for in
+the application's directory and the system directories, then in each
+directory of `PATH`, never in the current directory. `neura_libclang_unload()`
+leaves `libclang.dll` loaded until the process exits, because a process that
+has unloaded it fails at exit.
 
 After a successful load, `lib.requested` is the name passed to the platform
 loader, `lib.path` the file it opened, `lib.version` the
@@ -109,6 +126,8 @@ function pointer is `NULL`.
 
 On Debian and Ubuntu, install libclang with `apt install libclang1-19` (or a
 newer `libclang1-N`); the development package is not needed.
+On Windows, install LLVM (`winget install LLVM.LLVM`) or the C++ Clang tools
+for Windows component of Visual Studio.
 
 ## Building and testing
 
@@ -125,7 +144,8 @@ evaluation, function-like and object-like macros, and macro tokens. Without
 a libclang it exits with 77, which CTest reports as skipped; set
 `NEURA_LIBCLANG_REQUIRED=1` to make that a failure. `neura-libclang-missing`
 and `neura-libclang-env` check the errors for a missing explicit path and a
-missing `NEURA_LIBCLANG`.
+missing `NEURA_LIBCLANG`. On Windows, `neura-libclang-cwd` checks that a bare
+name is not looked for in the current directory.
 
 When used as a subproject, the tests are registered only when the parent
 sets `NEURA_LIBCLANG_TESTS` to `ON` before `add_subdirectory`.

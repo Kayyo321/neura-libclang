@@ -6,6 +6,8 @@
  *   neura_libclang_self_test missing   check the error for a missing explicit path
  *   neura_libclang_self_test env       check the error for a missing NEURA_LIBCLANG
  *                                      (run with NEURA_LIBCLANG set to such a path)
+ *   neura_libclang_self_test cwd       Windows: check that a bare name is not
+ *                                      looked for in the current directory
  *
  * When the standard search finds no usable libclang, the default mode exits
  * with 77, which CTest reports as skipped. Set NEURA_LIBCLANG_REQUIRED=1 to
@@ -212,6 +214,51 @@ static int run_missing(const char *explicit_path, const char *mention) {
     return failures ? 1 : 0;
 }
 
+#ifdef _WIN32
+#include <direct.h>
+
+/*
+ * A bare name is never looked for in the current directory. The test makes a
+ * directory, puts a file that is not a library under the bare name there, and
+ * loads that name from inside it: had the loader looked in the current
+ * directory, Windows would report the file as not a valid image (error 193)
+ * rather than as not found (error 126).
+ */
+static int run_current_directory(void) {
+    static const char directory[] = "neura-libclang-cwd";
+    static const char name[] = "neura-libclang-cwd-probe.dll";
+    char probe[sizeof directory + sizeof name];
+    NeuraLibclang lib;
+    FILE *file;
+
+    snprintf(probe, sizeof probe, "%s/%s", directory, name);
+    _mkdir(directory);
+    file = fopen(probe, "wb");
+    CHECK(file != NULL);
+    if (!file)
+        return 1;
+    fputs("not a library\n", file);
+    fclose(file);
+
+    CHECK(_chdir(directory) == 0);
+    CHECK(!neura_libclang_load(&lib, name));
+    CHECK(_chdir("..") == 0);
+    CHECK(lib.handle == NULL);
+    CHECK(strstr(lib.error, "error 126") != NULL);
+    CHECK(strstr(lib.error, "error 193") == NULL);
+    printf("expected error: %s\n", lib.error);
+
+    /* The same file named by a path is loaded, and refused as an image. */
+    CHECK(!neura_libclang_load(&lib, probe));
+    CHECK(strstr(lib.error, "error 193") != NULL);
+    printf("expected error: %s\n", lib.error);
+
+    remove(probe);
+    _rmdir(directory);
+    return failures ? 1 : 0;
+}
+#endif
+
 int main(int argc, char **argv) {
     NeuraLibclang lib;
     const char *required = getenv("NEURA_LIBCLANG_REQUIRED");
@@ -223,10 +270,19 @@ int main(int argc, char **argv) {
         CHECK(configured != NULL && configured[0] != '\0');
         return configured ? run_missing(NULL, "NEURA_LIBCLANG=") : 1;
     }
+#ifdef _WIN32
+    if (argc > 1 && strcmp(argv[1], "cwd") == 0)
+        return run_current_directory();
+    if (argc > 1) {
+        fprintf(stderr, "usage: %s [missing | env | cwd]\n", argv[0]);
+        return 2;
+    }
+#else
     if (argc > 1) {
         fprintf(stderr, "usage: %s [missing | env]\n", argv[0]);
         return 2;
     }
+#endif
 
     if (!neura_libclang_load(&lib, NULL)) {
         int skip = !(configured && configured[0]) && !(required && strcmp(required, "1") == 0);

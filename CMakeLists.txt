@@ -46,4 +46,9 @@ if(NEURA_LIBCLANG_TESTS)
     add_test(NAME neura-libclang-env COMMAND neura_libclang_self_test env)
     set_tests_properties(neura-libclang-env PROPERTIES
         ENVIRONMENT "NEURA_LIBCLANG=/nonexistent/neura/libclang.so")
+    if(WIN32)
+        # The loader never looks for a bare name in the current directory.
+        add_test(NAME neura-libclang-cwd COMMAND neura_libclang_self_test cwd)
+        set_tests_properties(neura-libclang-cwd PROPERTIES TIMEOUT 60)
+    endif()
 endif()

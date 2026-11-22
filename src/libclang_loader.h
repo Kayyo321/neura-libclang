@@ -219,11 +219,29 @@ typedef struct NeuraLibclang {
  *     and /usr/lib/llvm-N/lib/libclang.so.1 for each N;
  *   macOS: libclang.dylib, then the Xcode Command Line Tools, Xcode, and
  *     Homebrew locations;
- *   Windows: libclang.dll, then the default LLVM installation directory.
+ *   Windows: libclang.dll in the LLVM installation (%ProgramW6432%\LLVM\bin,
+ *     then the bin directory below the one recorded in the registry key
+ *     HKLM\SOFTWARE\LLVM\LLVM), then in Visual Studio's C++ Clang tools
+ *     (VC\Tools\Llvm\x64\bin of the developer environment's Visual Studio,
+ *     VCINSTALLDIR, then of the newest one vswhere reports with them, which
+ *     is ended after 30 seconds), then in each directory of PATH by its full
+ *     path. Only files that exist are tried, and the current directory never
+ *     is.
+ *
+ * Names are UTF-8. On Windows, a name with '/' or '\' or a drive is a path:
+ * that file is loaded, made absolute against the current directory if it is
+ * relative, and its own dependencies are found beside it. A bare name is
+ * looked for in the application's directory and the system directories, then
+ * in each directory of PATH, never in the current directory.
  */
 int neura_libclang_load(NeuraLibclang *lib, const char *explicit_path);
 
-/* Close the library opened by neura_libclang_load() and clear `lib`. */
+/*
+ * Close the library opened by neura_libclang_load() and clear `lib`. On
+ * Windows the library stays loaded until the process exits, because a process
+ * that has unloaded libclang.dll fails at exit; a later neura_libclang_load()
+ * of the same library reuses it.
+ */
 void neura_libclang_unload(NeuraLibclang *lib);
 
 #ifdef __cplusplus
